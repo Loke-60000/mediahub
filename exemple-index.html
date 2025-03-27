@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Hub - Download, Convert & Edit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <style>
+        .toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 15px; border-radius: 4px; background-color: #4F46E5; color: white; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); transform: translateY(100px); opacity: 0; transition: all 0.3s ease; z-index: 1050; max-width: 90%; sm:max-width: 350px; }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background-color: #10B981; }
+        .toast.error { background-color: #EF4444; }
+        .toast.info { background-color: #3B82F6; }
+        .empty-state { text-align: center; padding: 1.5rem; color: #6B7280; }
+        .empty-state-icon { font-size: 2.5rem; margin-bottom: 0.8rem; color: #D1D5DB; }
+        .cropper-container-wrapper { max-width: 100%; margin: auto; }
+        .img-container { width: 100%; max-height: 60vh; overflow: hidden; margin-bottom: 1rem; background-color: #f3f4f6; }
+        .img-container img { display: block; max-width: 100%; }
+        .cropper-view-box, .cropper-face { border-radius: .25rem; }
+        #square-preview-wrapper { width: 100%; max-width: 350px; sm:max-width: 450px; margin: 1rem auto; }
+        #square-preview-container { width: 100%; border: 1px dashed #d1d5db; background-color: #f9fafb; position: relative; overflow: hidden; }
+        #square-preview-canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+        .color-swatch { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s ease, border-color 0.1s ease, box-shadow 0.1s ease; box-shadow: 0 0 0 1px rgba(0,0,0,0.1); }
+        .color-swatch:hover { transform: scale(1.1); }
+        .color-swatch.selected { border-color: #4F46E5; transform: scale(1.1); box-shadow: 0 0 0 2px #4F46E5; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1040; opacity: 0; transition: opacity 0.2s ease-in-out; pointer-events: none; }
+        .modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .modal-content { background-color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); max-width: 90%; width: 400px; transform: scale(0.95); transition: transform 0.2s ease-in-out; }
+        .modal-overlay.show .modal-content { transform: scale(1); }
+        .tab-btn { padding: 12px 10px; sm:padding: 16px 24px; font-size: 0.875rem; sm:font-size: 1rem; font-weight: 500; text-align: center; outline: none; border-bottom: 2px solid transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; cursor: pointer; }
+        .tab-btn.active { font-weight: 600; }
+        .tab-btn:not(.active):hover { background-color: #f9fafb; }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen text-gray-800">
+    <div class="container mx-auto px-2 sm:px-4 py-6 sm:py-8">
+        <header class="text-center mb-6 sm:mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-indigo-700">Media Hub</h1>
+            <p class="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">Download, Convert & Edit Media</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+            <div class="flex border-b flex-wrap -mb-px">
+                <button class="tab-btn flex-grow" data-tab="youtube"><i class="fab fa-youtube text-red-600 mr-1 sm:mr-2"></i> YouTube</button>
+                <button class="tab-btn flex-grow" data-tab="converter"><i class="fas fa-exchange-alt text-indigo-600 mr-1 sm:mr-2"></i> Converter</button>
+                <button class="tab-btn flex-grow" data-tab="cropper"><i class="fas fa-crop-alt text-green-600 mr-1 sm:mr-2"></i> Cropper</button>
+                <button class="tab-btn flex-grow" data-tab="square-center"><i class="fas fa-expand-arrows-alt text-blue-600 mr-1 sm:mr-2"></i> Aspect Fit</button>
+            </div>
+
+            <div id="youtube-content" class="tab-content p-4 sm:p-6">
+                <div class="max-w-3xl mx-auto">
+                    <div class="mb-6">
+                        <label for="youtube-url" class="block text-sm font-medium text-gray-700 mb-2">YouTube URL</label>
+                        <div class="flex">
+                            <input type="url" id="youtube-url" placeholder="https://www.youtube.com/watch?v=..." class="flex-1 px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-l-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base">
+                            <button id="fetch-info" class="bg-indigo-600 text-white px-3 sm:px-4 rounded-r-lg hover:bg-indigo-700 transition duration-150 ease-in-out text-sm sm:text-base">
+                                <span class="button-text">Fetch</span><span class="hidden sm:inline"> Info</span>
+                                <i class="fas fa-spinner fa-spin ml-2 hidden"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="video-info" class="hidden mb-6 p-3 sm:p-4 border rounded-lg bg-gray-50">
+                        <div class="flex items-center">
+                            <div id="video-thumbnail" class="w-24 h-16 sm:w-32 sm:h-24 bg-gray-200 rounded mr-3 sm:mr-4 bg-cover bg-center flex-shrink-0"></div>
+                            <div class="overflow-hidden">
+                                <h3 id="video-title" class="font-semibold text-base sm:text-lg truncate"></h3>
+                                <p id="video-duration" class="text-xs sm:text-sm text-gray-600"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="download-options" class="hidden">
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Format</label>
+                            <select id="quality" class="w-full px-3 py-2 sm:px-4 sm:py-2 border border-gray-300 rounded-lg text-sm sm:text-base bg-white">
+                                <option value="video_best">Video - Best Quality</option>
+                                <option value="video_1080p">Video - 1080p (HD)</option>
+                                <option value="video_720p">Video - 720p (HD)</option>
+                                <option value="video_480p">Video - 480p (SD)</option>
+                                <option value="video_360p">Video - 360p (Low)</option>
+                                <option value="audio_mp3">Audio - MP3</option>
+                            </select>
+                        </div>
+                        <button id="start-download" class="w-full bg-indigo-600 text-white py-2 sm:py-3 rounded-lg hover:bg-indigo-700 font-medium transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base">
+                            <span class="button-text">Download</span>
+                            <i class="fas fa-spinner fa-spin ml-2 hidden"></i>
+                        </button>
+                    </div>
+                    <div id="downloads-list" class="mt-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-base sm:text-lg font-semibold flex items-center"><i class="fas fa-history mr-2"></i> Downloads</h3>
+                            <div>
+                                <button type="button" id="refresh-downloads" class="text-indigo-600 hover:text-indigo-800 mr-2 p-1 sm:p-0" title="Refresh List"><i class="fas fa-sync-alt"></i><span class="hidden sm:inline ml-1"> Refresh</span></button>
+                                <button type="button" id="clear-downloads" class="text-red-600 hover:text-red-800 p-1 sm:p-0" title="Clear All Downloads"><i class="fas fa-trash"></i><span class="hidden sm:inline ml-1"> Clear All</span></button>
+                            </div>
+                        </div>
+                        <div id="downloads-container" class="space-y-2 sm:space-y-3">
+                            <div class="empty-state"><div class="empty-state-icon"><i class="fas fa-download"></i></div><p class="text-sm">No downloads yet</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="converter-content" class="tab-content hidden p-4 sm:p-6">
+                 <div class="max-w-3xl mx-auto">
+                     <div class="mb-6 text-center">
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg py-8 sm:py-12 px-4 sm:px-6 cursor-pointer hover:border-indigo-500" id="converter-dropzone">
+                            <input type="file" id="converter-file-input" class="hidden" accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp">
+                            <i class="fas fa-cloud-upload-alt text-4xl sm:text-5xl text-gray-400 mb-3 sm:mb-4"></i>
+                            <h3 class="font-medium text-base sm:text-lg mb-1">Drag & Drop File</h3>
+                            <p class="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">or</p>
+                            <button type="button" id="converter-browse-files" class="bg-indigo-600 text-white px-4 py-1.5 sm:px-6 sm:py-2 rounded-lg hover:bg-indigo-700 text-sm sm:text-base">Browse</button>
+                            <p class="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-500">Max: 500MB. Images, Audio, Video, Docs.</p>
+                        </div>
+                    </div>
+                    <div id="converter-file-info" class="hidden mb-6 p-3 sm:p-4 border rounded-lg bg-gray-50 flex justify-between items-center">
+                         <div class="flex items-center overflow-hidden mr-2">
+                            <i id="converter-file-info-icon" class="fas fa-file text-3xl sm:text-4xl text-gray-500 mr-3 sm:mr-4 flex-shrink-0"></i>
+                            <div class="overflow-hidden">
+                                <h3 id="converter-file-name" class="font-semibold text-sm sm:text-lg truncate"></h3>
+                                <p id="converter-file-size" class="text-xs sm:text-sm text-gray-600"></p>
+                                <p id="converter-file-type-info" class="text-xs text-gray-500"></p>
+                            </div>
+                        </div>
+                         <button type="button" id="converter-remove-file" class="ml-auto text-red-500 hover:text-red-700 flex-shrink-0 p-1" title="Remove file">
+                             <i class="fas fa-times-circle fa-lg"></i>
+                         </button>
+                    </div>
+                    <div id="converter-conversion-options" class="hidden">
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Convert to</label>
+                             <p id="converter-no-formats-message" class="text-sm text-red-500 hidden mb-4">No compatible conversion formats found for this file type.</p>
+                            <div id="converter-format-buttons-container" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 mb-4">
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="mp4">MP4</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="mp3">MP3</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="jpg">JPG</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="png">PNG</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="gif">GIF</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="webm">WEBM</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="wav">WAV</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="webp">WEBP</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="pdf">PDF</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="txt">TXT</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="doc">DOC</button>
+                                <button type="button" class="format-btn bg-gray-100 py-2 px-2 sm:px-3 rounded text-center hover:bg-indigo-100 hidden text-xs sm:text-sm" data-format="docx">DOCX</button>
+                            </div>
+                        </div>
+                        <button type="button" id="start-conversion" class="w-full bg-indigo-600 text-white py-2 sm:py-3 rounded-lg hover:bg-indigo-700 font-medium transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base" disabled>
+                             <span class="button-text">Convert File</span>
+                             <i class="fas fa-spinner fa-spin ml-2 hidden"></i>
+                        </button>
+                    </div>
+                    <div id="conversions-list" class="mt-8">
+                        <div class="flex justify-between items-center mb-4">
+                             <h3 class="text-base sm:text-lg font-semibold flex items-center"><i class="fas fa-history mr-2"></i> Conversions</h3>
+                            <div>
+                                <button type="button" id="refresh-conversions" class="text-indigo-600 hover:text-indigo-800 mr-2 p-1 sm:p-0" title="Refresh List"><i class="fas fa-sync-alt"></i><span class="hidden sm:inline ml-1"> Refresh</span></button>
+                                <button type="button" id="clear-conversions" class="text-red-600 hover:text-red-800 p-1 sm:p-0" title="Clear All Conversions"><i class="fas fa-trash"></i><span class="hidden sm:inline ml-1"> Clear All</span></button>
+                            </div>
+                        </div>
+                        <div id="conversions-container" class="space-y-2 sm:space-y-3">
+                            <div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exchange-alt"></i></div><p class="text-sm">No conversions yet</p></div>
+                        </div>
+                    </div>
+                 </div>
+            </div>
+
+            <div id="cropper-content" class="tab-content hidden p-4 sm:p-6">
+                 <div class="max-w-4xl mx-auto">
+                     <div class="mb-6 text-center" id="cropper-upload-section">
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg py-8 sm:py-12 px-4 sm:px-6 cursor-pointer hover:border-green-500" id="cropper-dropzone">
+                            <input type="file" id="cropper-file-input" class="hidden" accept="image/png, image/jpeg, image/webp, image/gif, image/bmp">
+                            <i class="fas fa-image text-4xl sm:text-5xl text-gray-400 mb-3 sm:mb-4"></i>
+                            <h3 class="font-medium text-base sm:text-lg mb-1">Drag & Drop Image</h3>
+                            <p class="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">or</p>
+                            <button type="button" id="cropper-browse-files" class="bg-green-600 text-white px-4 py-1.5 sm:px-6 sm:py-2 rounded-lg hover:bg-green-700 text-sm sm:text-base">Browse</button>
+                            <p class="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-500">PNG, JPG, WEBP, GIF, BMP. Max 50MB.</p>
+                        </div>
+                    </div>
+                    <div id="cropper-main-section" class="hidden">
+                        <div class="cropper-container-wrapper mb-4">
+                             <div class="img-container">
+                                <img id="cropper-image" src="#" alt="Image to crop">
+                             </div>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mb-6">
+                             <button type="button" id="crop-btn" class="bg-green-600 text-white px-4 py-2 sm:px-6 rounded-lg hover:bg-green-700 text-sm sm:text-base">
+                                <i class="fas fa-check mr-1 sm:mr-2"></i>Crop & DL
+                            </button>
+                             <button type="button" id="cropper-reset-btn" class="bg-gray-500 text-white px-3 py-2 sm:px-4 rounded-lg hover:bg-gray-600 text-sm sm:text-base">
+                                <i class="fas fa-sync-alt mr-1 sm:mr-2"></i>Reset
+                            </button>
+                            <button type="button" id="cropper-change-image-btn" class="bg-red-500 text-white px-3 py-2 sm:px-4 rounded-lg hover:bg-red-600 text-sm sm:text-base">
+                                <i class="fas fa-times mr-1 sm:mr-2"></i>Change
+                            </button>
+                        </div>
+                    </div>
+                 </div>
+            </div>
+
+            <div id="square-center-content" class="tab-content hidden p-4 sm:p-6">
+                 <div class="max-w-3xl mx-auto">
+                     <div class="mb-6 text-center" id="square-upload-section">
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg py-8 sm:py-12 px-4 sm:px-6 cursor-pointer hover:border-blue-500" id="square-dropzone">
+                            <input type="file" id="square-file-input" class="hidden" accept="image/png, image/jpeg, image/webp">
+                            <i class="fas fa-expand-arrows-alt text-4xl sm:text-5xl text-gray-400 mb-3 sm:mb-4"></i>
+                            <h3 class="font-medium text-base sm:text-lg mb-1">Drag & Drop Image</h3>
+                            <p class="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">or</p>
+                            <button type="button" id="square-browse-files" class="bg-blue-600 text-white px-4 py-1.5 sm:px-6 sm:py-2 rounded-lg hover:bg-blue-700 text-sm sm:text-base">Browse</button>
+                            <p class="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-500">PNG, JPG, WEBP. Max 50MB.</p>
+                        </div>
+                    </div>
+                    <div id="square-main-section" class="hidden">
+                         <div id="square-preview-wrapper" class="mb-4">
+                             <div id="square-preview-container">
+                                <canvas id="square-preview-canvas"></canvas>
+                             </div>
+                         </div>
+                         <img id="square-source-image" src="#" alt="Source Image" class="hidden">
+                         <div class="mb-6 p-3 sm:p-4 border rounded-lg bg-gray-50">
+                            <h4 class="text-base sm:text-lg font-medium mb-3 text-center">Options</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                <div>
+                                    <label for="square-aspect-ratio" class="block text-sm font-medium text-gray-700 mb-1">Aspect Ratio</label>
+                                    <select id="square-aspect-ratio" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white"></select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Background</label>
+                                    <div class="flex flex-col space-y-2">
+                                        <label class="flex items-center cursor-pointer text-sm">
+                                            <input type="radio" name="square-bg-option" value="border" class="form-radio text-blue-600 mr-2" checked>
+                                            <span>Use Border Color</span>
+                                        </label>
+                                        <div class="flex items-start text-sm">
+                                            <label class="flex items-center cursor-pointer mr-3 flex-shrink-0 mt-1">
+                                                <input type="radio" name="square-bg-option" value="custom" class="form-radio text-blue-600 mr-2">
+                                                <span>Custom:</span>
+                                            </label>
+                                            <div id="color-swatch-container" class="flex flex-wrap gap-2"></div>
+                                        </div>
+                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
+                            <button type="button" id="square-process-btn" class="bg-blue-600 text-white px-4 py-2 sm:px-6 rounded-lg hover:bg-blue-700 text-sm sm:text-base">
+                                <i class="fas fa-check mr-1 sm:mr-2"></i>Process & DL
+                            </button>
+                             <button type="button" id="square-change-image-btn" class="bg-red-500 text-white px-3 py-2 sm:px-4 rounded-lg hover:bg-red-600 text-sm sm:text-base">
+                                <i class="fas fa-times mr-1 sm:mr-2"></i>Change
+                            </button>
+                        </div>
+                    </div>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <template id="task-template">
+        <div class="task-item border rounded-lg p-2 sm:p-3 bg-white">
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center overflow-hidden flex-grow">
+                    <div class="task-icon w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0 flex items-center justify-center rounded-full mr-2 sm:mr-3">
+                        <i class="fas fa-file-video text-indigo-500 text-sm sm:text-base"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <h4 class="task-title font-medium truncate text-sm sm:text-base"></h4>
+                        <p class="task-info text-xs text-gray-500 truncate"></p>
+                         <p class="task-error-info text-xs text-red-500 hidden truncate"></p>
+                    </div>
+                </div>
+                <div class="flex items-center flex-shrink-0">
+                    <div class="task-status text-xs sm:text-sm px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full mr-1 sm:mr-2 whitespace-nowrap"></div>
+                    <div class="task-actions flex gap-1 sm:gap-2"></div>
+                </div>
+            </div>
+            <div class="task-progress mt-1.5 sm:mt-2 hidden">
+                <div class="w-full bg-gray-200 rounded-full h-1.5 sm:h-2.5">
+                    <div class="progress-bar bg-indigo-600 h-1.5 sm:h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-0.5 text-right progress-text">0%</p>
+            </div>
+        </div>
+    </template>
+
+    <div id="toast" class="toast"><div id="toast-message"></div></div>
+
+    <div id="confirmation-modal" class="modal-overlay hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <h3 class="text-lg font-medium leading-6 text-gray-900 mb-2" id="modal-title">Confirmation</h3>
+            <div class="mb-4">
+                <p class="text-sm text-gray-600" id="modal-message">Are you sure?</p>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button id="modal-cancel-btn" type="button" class="px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancel</button>
+                <button id="modal-confirm-btn" type="button" class="px-4 py-2 bg-red-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script>
+        const apiBaseUrl = 'http://localhost:8000'; // Needs to match your backend address
+        const USER_DOWNLOADS_KEY = 'user_downloads';
+        const USER_CONVERSIONS_KEY = 'user_conversions';
+        const MAX_FILE_SIZE_MB = 500;
+        const MAX_IMAGE_SIZE_MB = 50;
+        const POLL_INTERVAL_MS = 5000;
+
+        const modalElement = document.getElementById('confirmation-modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        let confirmCallback = null;
+
+        function showModal(message, onConfirm) {
+            modalMessage.textContent = message; confirmCallback = onConfirm;
+            modalElement.classList.remove('hidden');
+            requestAnimationFrame(() => modalElement.classList.add('show'));
+        }
+        function hideModal() {
+            modalElement.classList.remove('show');
+            setTimeout(() => { modalElement.classList.add('hidden'); confirmCallback = null; }, 200);
+        }
+        modalConfirmBtn.addEventListener('click', () => { if (typeof confirmCallback === 'function') confirmCallback(); hideModal(); });
+        modalCancelBtn.addEventListener('click', hideModal);
+        modalElement.addEventListener('click', (e) => { if (e.target === modalElement) hideModal(); });
+
+        function generateUUID() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c == 'x' ? r : r & 0x3 | 0x8; return v.toString(16); }); }
+        function formatFileSize(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024, i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${['Bytes', 'KB', 'MB', 'GB'][i]}`; }
+        function formatDuration(seconds) { if (seconds == null || isNaN(seconds)) return 'Unknown duration'; seconds = Math.round(seconds); const hrs = Math.floor(seconds / 3600), mins = Math.floor(seconds % 3600 / 60), secs = seconds % 60; return (hrs > 0 ? `${hrs}:` : '') + `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`; }
+        if (!sessionStorage.getItem('user_id')) sessionStorage.setItem('user_id', generateUUID());
+
+        function getStorageKey(type) { return type === 'download' ? USER_DOWNLOADS_KEY : USER_CONVERSIONS_KEY; }
+        function getTaskIdField(type) { return type === 'download' ? 'download_id' : 'conversion_id'; }
+        function saveUserTask(type, data) { const k = getStorageKey(type), idField = getTaskIdField(type); let ts = JSON.parse(sessionStorage.getItem(k) || '[]'); const id = data[idField]; const i = ts.findIndex(t => t[idField] === id); if (i >= 0) ts[i] = { ...ts[i], ...data }; else ts.push(data); sessionStorage.setItem(k, JSON.stringify(ts)); }
+        function getUserTasks(type) { return JSON.parse(sessionStorage.getItem(getStorageKey(type)) || '[]'); }
+        function deleteUserTask(type, id) { const k = getStorageKey(type), idField = getTaskIdField(type); let ts = getUserTasks(type); ts = ts.filter(t => t[idField] !== id); sessionStorage.setItem(k, JSON.stringify(ts)); }
+        function clearUserTasks(type) { sessionStorage.setItem(getStorageKey(type), '[]'); const endpoint = type === 'download' ? `${apiBaseUrl}/youtube/clear-all` : `${apiBaseUrl}/conversion/clear-all`; fetch(endpoint, { method: 'DELETE' }).catch(e => console.warn(`Failed server clear ${type}`, e)); }
+
+        function showToast(message, type = 'info', duration = 4000) { const t = document.getElementById('toast'), m = document.getElementById('toast-message'); m.textContent = message; t.className = `toast ${type}`; setTimeout(() => t.classList.add('show'), 10); setTimeout(() => t.classList.remove('show'), duration); }
+
+        function setActiveTab(tabId) {
+            const activeTab = document.querySelector(`.tab-btn[data-tab="${tabId}"]`); if (!activeTab) return;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active', 'bg-red-50', 'text-red-700', 'border-red-700', 'bg-indigo-50', 'text-indigo-700', 'border-indigo-700', 'bg-green-50', 'text-green-700', 'border-green-700', 'bg-blue-50', 'text-blue-700', 'border-blue-700', 'border-b-2'));
+            const styles = { youtube: ['bg-red-50', 'text-red-700', 'border-red-700'], converter: ['bg-indigo-50', 'text-indigo-700', 'border-indigo-700'], cropper: ['bg-green-50', 'text-green-700', 'border-green-700'], 'square-center': ['bg-blue-50', 'text-blue-700', 'border-blue-700'] };
+            activeTab.classList.add('active', 'border-b-2', ...(styles[tabId] || styles.converter));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            const contentEl = document.getElementById(tabId + '-content'); if (contentEl) contentEl.classList.remove('hidden');
+            const url = new URL(window.location); url.searchParams.set('tab', tabId); window.history.pushState({}, '', url);
+        }
+        function initializeTabFromUrl() { const params = new URLSearchParams(window.location.search), tab = params.get('tab'), validTabs = ['youtube', 'converter', 'cropper', 'square-center']; setActiveTab(tab && validTabs.includes(tab) ? tab : 'youtube'); }
+        document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => setActiveTab(b.dataset.tab)));
+
+        function setLoadingState(btn, isLoading, defaultText = 'Submit') { const txt = btn.querySelector('.button-text'), icon = btn.querySelector('.fa-spinner'); btn.disabled = isLoading; if (txt) txt.textContent = isLoading ? 'Processing...' : defaultText; if (icon) icon.classList.toggle('hidden', !isLoading); else btn.textContent = isLoading ? 'Processing...' : defaultText; }
+        async function handleApiError(response, defaultMessage) { let msg = defaultMessage; try { const data = await response.json(); msg = data.detail || data.message || `${response.status}: ${response.statusText || 'API Error'}`; } catch (e) { msg = `${response.status}: ${response.statusText || 'Request failed'}`; } console.error("API Error:", msg, response); return msg; }
+
+        const fetchInfoButton = document.getElementById('fetch-info');
+        const videoUrlInput = document.getElementById('youtube-url');
+        const videoInfoDiv = document.getElementById('video-info');
+        const videoThumbnailDiv = document.getElementById('video-thumbnail');
+        const videoTitleEl = document.getElementById('video-title');
+        const videoDurationEl = document.getElementById('video-duration');
+        const downloadOptionsDiv = document.getElementById('download-options');
+        fetchInfoButton.addEventListener('click', async () => {
+            const url = videoUrlInput.value.trim(); if (!url || (!url.includes('youtube.com') && !url.includes('youtu.be'))) return showToast('Please enter a valid YouTube URL', 'error'); setLoadingState(fetchInfoButton, true, 'Fetch Info'); videoInfoDiv.classList.add('hidden'); downloadOptionsDiv.classList.add('hidden');
+            try {
+                const response = await fetch(`${apiBaseUrl}/info?url=${encodeURIComponent(url)}`); if (!response.ok) throw new Error(await handleApiError(response, 'Failed to fetch video info')); const data = await response.json(); videoTitleEl.textContent = data.title || 'Unknown Title'; videoDurationEl.textContent = formatDuration(data.duration); videoThumbnailDiv.style.backgroundImage = data.thumbnail ? `url(${data.thumbnail})` : ''; videoThumbnailDiv.style.backgroundColor = data.thumbnail ? 'transparent' : '#E5E7EB'; videoInfoDiv.classList.remove('hidden'); downloadOptionsDiv.classList.remove('hidden'); showToast('Video info loaded successfully!', 'success');
+            } catch (e) { console.error(e); showToast(e.message, 'error'); } finally { setLoadingState(fetchInfoButton, false, 'Fetch Info'); }
+        });
+
+        const startDownloadButton = document.getElementById('start-download');
+        const qualitySelect = document.getElementById('quality');
+        startDownloadButton.addEventListener('click', async () => {
+            const url = videoUrlInput.value.trim(); if (!url) return showToast('YouTube URL is missing', 'error'); const qualityOption = qualitySelect.value; let quality = 'best', mode = 'video+audio'; if (qualityOption.startsWith('video_')) quality = qualityOption.replace('video_', ''); else if (qualityOption === 'audio_mp3') mode = 'audio-only'; setLoadingState(startDownloadButton, true, 'Download');
+            try {
+                const response = await fetch(`${apiBaseUrl}/youtube`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, quality, mode }) }); if (!response.ok) throw new Error(await handleApiError(response, 'Failed to start download task')); saveUserTask('download', await response.json()); showToast('Download task started!', 'success'); displayUserDownloads();
+            } catch (e) { console.error(e); showToast(e.message, 'error'); } finally { setLoadingState(startDownloadButton, false, 'Download'); }
+        });
+
+        const converterDropzone = document.getElementById('converter-dropzone'), converterFileInput = document.getElementById('converter-file-input'), converterFileInfoDiv = document.getElementById('converter-file-info'), converterConversionOptionsDiv = document.getElementById('converter-conversion-options'), startConversionButton = document.getElementById('start-conversion'), converterRemoveFileButton = document.getElementById('converter-remove-file');
+        const converterFileInfoIcon = document.getElementById('converter-file-info-icon'), converterFileNameEl = document.getElementById('converter-file-name'), converterFileSizeEl = document.getElementById('converter-file-size'), converterFileTypeInfoEl = document.getElementById('converter-file-type-info');
+        const converterFormatButtonsContainer = document.getElementById('converter-format-buttons-container'), converterNoFormatsMsg = document.getElementById('converter-no-formats-message');
+        let converterSelectedFile = null, converterSelectedFormat = null;
+        const conversionMap = { image: ['jpg', 'png', 'gif', 'webp', 'pdf', 'bmp', 'tiff'], audio: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'], video: ['mp4', 'webm', 'gif', 'mp3', 'mov', 'avi', 'mkv'], document: ['pdf', 'txt', 'html', 'docx', 'odt'], spreadsheet: ['xlsx', 'ods', 'csv'], presentation: ['pptx', 'odp', 'pdf'] };
+        const mimeCategoryMap = { 'image': 'image', 'audio': 'audio', 'video': 'video', 'application/pdf': 'document', 'text/plain': 'document', 'msword': 'document', 'officedocument.wordprocessingml': 'document', 'ms-excel': 'spreadsheet', 'officedocument.spreadsheetml': 'spreadsheet', 'ms-powerpoint': 'presentation', 'officedocument.presentationml': 'presentation', 'opendocument.text': 'document', 'opendocument.spreadsheet': 'spreadsheet', 'opendocument.presentation': 'presentation' };
+        const extCategoryMap = { jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', webp: 'image', bmp: 'image', tiff: 'image', svg: 'image', mp3: 'audio', wav: 'audio', ogg: 'audio', aac: 'audio', flac: 'audio', m4a: 'audio', mp4: 'video', webm: 'video', mov: 'video', avi: 'video', mkv: 'video', wmv: 'video', flv: 'video', pdf: 'document', txt: 'document', doc: 'document', docx: 'document', rtf: 'document', odt: 'document', html: 'document', htm: 'document', xls: 'spreadsheet', xlsx: 'spreadsheet', csv: 'spreadsheet', ods: 'spreadsheet', ppt: 'presentation', pptx: 'presentation', odp: 'presentation' };
+        const categoryIcons = { image: 'fa-file-image text-purple-500', audio: 'fa-file-audio text-blue-500', video: 'fa-file-video text-red-500', document: 'fa-file-alt text-green-500', spreadsheet: 'fa-file-excel text-green-600', presentation: 'fa-file-powerpoint text-orange-500' };
+        function getFileCategory(file) { if (!file) return null; const mime = file.type, ext = file.name.split('.').pop().toLowerCase(); const mimeBase = mime.split('/')[0]; if (mimeCategoryMap[mime]) return mimeCategoryMap[mime]; if (mimeCategoryMap[mimeBase]) return mimeCategoryMap[mimeBase]; for (const key in mimeCategoryMap) { if (mime.includes(key)) return mimeCategoryMap[key]; } return extCategoryMap[ext] || null; }
+        function updateConverterUI() {
+            if (converterSelectedFile) {
+                const category = getFileCategory(converterSelectedFile), possibleFormats = category ? (conversionMap[category] || []) : [], currentExt = converterSelectedFile.name.split('.').pop().toLowerCase();
+                converterFileInfoIcon.className = `fas ${categoryIcons[category] || 'fa-file text-gray-500'} text-3xl sm:text-4xl mr-3 sm:mr-4 flex-shrink-0`;
+                converterFileNameEl.textContent = converterSelectedFile.name; converterFileSizeEl.textContent = formatFileSize(converterSelectedFile.size); converterFileTypeInfoEl.textContent = `Type: ${converterSelectedFile.type || 'Unknown'} (${category || 'unknown'})`;
+                converterFileInfoDiv.classList.remove('hidden'); converterConversionOptionsDiv.classList.remove('hidden');
+                let visibleCount = 0;
+                converterFormatButtonsContainer.querySelectorAll('.format-btn').forEach(btn => {
+                    const format = btn.dataset.format, isPossible = possibleFormats.includes(format) && format !== currentExt;
+                    btn.classList.toggle('hidden', !isPossible);
+                    if (isPossible) visibleCount++;
+                    else if (btn.classList.contains('bg-indigo-200')) { btn.classList.remove('bg-indigo-200', 'text-indigo-800'); btn.classList.add('bg-gray-100'); converterSelectedFormat = null; }
+                });
+                converterNoFormatsMsg.classList.toggle('hidden', visibleCount > 0);
+                if (visibleCount === 0) converterSelectedFormat = null;
+            } else {
+                converterFileInfoDiv.classList.add('hidden'); converterConversionOptionsDiv.classList.add('hidden'); converterFormatButtonsContainer.querySelectorAll('.format-btn').forEach(b => b.classList.add('hidden')); converterNoFormatsMsg.classList.add('hidden'); converterSelectedFormat = null;
+            }
+            startConversionButton.disabled = !(converterSelectedFile && converterSelectedFormat);
+        }
+        function handleConverterFileSelection(file) { if (!file) return resetConverterSelection(); const maxSize = MAX_FILE_SIZE_MB * 1024 * 1024; if (file.size > maxSize) { showToast(`File exceeds ${MAX_FILE_SIZE_MB}MB limit`, 'error'); return resetConverterSelection(); } converterSelectedFile = file; updateConverterUI(); showToast('File selected. Please choose a format to convert to.', 'info'); }
+        function resetConverterSelection() { converterSelectedFile = null; converterSelectedFormat = null; converterFileInput.value = ''; updateConverterUI(); converterFormatButtonsContainer.querySelectorAll('.format-btn.bg-indigo-200').forEach(b => { b.classList.remove('bg-indigo-200', 'text-indigo-800'); b.classList.add('bg-gray-100'); }); }
+        converterDropzone.addEventListener('dragover', (e) => { e.preventDefault(); converterDropzone.classList.add('border-indigo-500'); }); converterDropzone.addEventListener('dragleave', () => converterDropzone.classList.remove('border-indigo-500')); converterDropzone.addEventListener('drop', (e) => { e.preventDefault(); converterDropzone.classList.remove('border-indigo-500'); if (e.dataTransfer.files?.[0]) handleConverterFileSelection(e.dataTransfer.files[0]); });
+        document.getElementById('converter-browse-files').addEventListener('click', () => converterFileInput.click()); converterFileInput.addEventListener('change', (e) => handleConverterFileSelection(e.target.files?.[0])); converterRemoveFileButton.addEventListener('click', resetConverterSelection);
+        converterFormatButtonsContainer.querySelectorAll('.format-btn').forEach(btn => { btn.addEventListener('click', () => { if (btn.classList.contains('hidden')) return; converterFormatButtonsContainer.querySelectorAll('.format-btn').forEach(b => { b.classList.remove('bg-indigo-200', 'text-indigo-800'); b.classList.add('bg-gray-100'); }); btn.classList.remove('bg-gray-100'); btn.classList.add('bg-indigo-200', 'text-indigo-800'); converterSelectedFormat = btn.dataset.format; startConversionButton.disabled = false; showToast(`Selected format: ${converterSelectedFormat.toUpperCase()}`, 'info', 2000); }); });
+        startConversionButton.addEventListener('click', async () => {
+            if (!converterSelectedFile || !converterSelectedFormat) return; setLoadingState(startConversionButton, true, 'Convert File');
+            try {
+                setLoadingState(startConversionButton, true, 'Uploading...'); const formData = new FormData(); formData.append('file', converterSelectedFile); formData.append('title', converterSelectedFile.name); const uploadResponse = await fetch(`${apiBaseUrl}/uploads/upload`, { method: 'POST', body: formData }); if (!uploadResponse.ok) throw new Error(`Upload Error: ${await handleApiError(uploadResponse, 'File upload failed')}`); const uploadResult = await uploadResponse.json(); showToast('Upload complete. Starting conversion...', 'info');
+                setLoadingState(startConversionButton, true, 'Converting...'); const convertResponse = await fetch(`${apiBaseUrl}/conversion/convert`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ download_id: uploadResult.download_id, output_format: converterSelectedFormat }) }); if (!convertResponse.ok) throw new Error(`Conversion Error: ${await handleApiError(convertResponse, 'Failed to start conversion task')}`); saveUserTask('conversion', await convertResponse.json()); showToast('Conversion task started successfully!', 'success'); resetConverterSelection(); displayUserConversions();
+            } catch (e) { console.error(e); showToast(e.message, 'error'); } finally { setLoadingState(startConversionButton, false, 'Convert File'); }
+        });
+
+        const cropperUploadSection = document.getElementById('cropper-upload-section'), cropperMainSection = document.getElementById('cropper-main-section'), cropperImage = document.getElementById('cropper-image'), cropperDropzone = document.getElementById('cropper-dropzone'), cropperFileInput = document.getElementById('cropper-file-input'), cropBtn = document.getElementById('crop-btn'), cropperResetBtn = document.getElementById('cropper-reset-btn'), cropperChangeImageBtn = document.getElementById('cropper-change-image-btn');
+        let cropper = null, cropperSourceFile = null;
+        function initCropper(imgEl) { if (cropper) cropper.destroy(); cropper = new Cropper(imgEl, { viewMode: 1, dragMode: 'move', autoCropArea: 0.8, restore: false, modal: true, guides: true, center: true, highlight: false, cropBoxMovable: true, cropBoxResizable: true, toggleDragModeOnDblclick: false }); }
+        function handleCropperFileSelection(file) { if (!file) return resetCropper(); const maxSize = MAX_IMAGE_SIZE_MB * 1024 * 1024; if (!file.type.startsWith('image/')) { showToast('Invalid file type. Please select an image.', 'error'); return resetCropper(); } if (file.size > maxSize) { showToast(`Image exceeds ${MAX_IMAGE_SIZE_MB}MB limit`, 'error'); return resetCropper(); } cropperSourceFile = file; const reader = new FileReader(); reader.onload = (e) => { cropperImage.src = e.target.result; cropperUploadSection.classList.add('hidden'); cropperMainSection.classList.remove('hidden'); setTimeout(() => { initCropper(cropperImage); showToast('Image loaded. Adjust crop area.', 'info'); }, 100); }; reader.onerror = () => { showToast('Failed to read image file.', 'error'); resetCropper(); }; reader.readAsDataURL(file); }
+        function resetCropper() { if (cropper) cropper.destroy(); cropper = null; cropperImage.src = '#'; cropperFileInput.value = ''; cropperSourceFile = null; cropperUploadSection.classList.remove('hidden'); cropperMainSection.classList.add('hidden'); }
+        cropperDropzone.addEventListener('dragover', (e) => { e.preventDefault(); cropperDropzone.classList.add('border-green-500'); }); cropperDropzone.addEventListener('dragleave', () => cropperDropzone.classList.remove('border-green-500')); cropperDropzone.addEventListener('drop', (e) => { e.preventDefault(); cropperDropzone.classList.remove('border-green-500'); if (e.dataTransfer.files?.[0]) handleCropperFileSelection(e.dataTransfer.files[0]); });
+        document.getElementById('cropper-browse-files').addEventListener('click', () => cropperFileInput.click()); cropperFileInput.addEventListener('change', (e) => handleCropperFileSelection(e.target.files?.[0])); cropperChangeImageBtn.addEventListener('click', resetCropper); cropperResetBtn.addEventListener('click', () => { if (cropper) cropper.reset(); });
+        cropBtn.addEventListener('click', () => {
+            if (!cropper || !cropperSourceFile) return; setLoadingState(cropBtn, true, 'Crop & DL');
+            try {
+                const canvas = cropper.getCroppedCanvas({ imageSmoothingEnabled: true, imageSmoothingQuality: 'high', fillColor: '#fff' });
+                let mime = 'image/jpeg', quality = 0.92, originalType = cropperSourceFile.type;
+                if (originalType === 'image/png') { mime = 'image/png'; quality = undefined; }
+                else if (originalType === 'image/webp') { mime = 'image/webp'; quality = 0.9; }
+                const extension = mime.split('/')[1], filename = `${cropperSourceFile.name.replace(/\.[^/.]+$/, "")}_cropped.${extension}`;
+                canvas.toBlob((blob) => { if (!blob) { showToast('Failed to create cropped image.', 'error'); setLoadingState(cropBtn, false, 'Crop & DL'); return; } const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); showToast('Image cropped and download started!', 'success'); setLoadingState(cropBtn, false, 'Crop & DL'); }, mime, quality);
+            } catch (e) { console.error("Cropping failed:", e); showToast(`Cropping failed: ${e.message}`, 'error'); setLoadingState(cropBtn, false, 'Crop & DL'); }
+        });
+
+        const squareUploadSection = document.getElementById('square-upload-section'), squareMainSection = document.getElementById('square-main-section'), squareDropzone = document.getElementById('square-dropzone'), squareFileInput = document.getElementById('square-file-input'), squareSourceImage = document.getElementById('square-source-image'), squarePreviewContainer = document.getElementById('square-preview-container'), squarePreviewCanvas = document.getElementById('square-preview-canvas'), squareProcessBtn = document.getElementById('square-process-btn'), squareChangeImageBtn = document.getElementById('square-change-image-btn'), squareAspectRatioSelect = document.getElementById('square-aspect-ratio'), colorSwatchContainer = document.getElementById('color-swatch-container'), squareBgOptions = document.querySelectorAll('input[name="square-bg-option"]');
+        let squareSourceFile = null, selectedCustomColor = '#FFFFFF';
+        const presetColors = ['#FFFFFF', '#000000', '#CCCCCC', '#F3F4F6', '#3B82F6', '#EF4444', '#10B981', '#EAB308'];
+        const aspectRatios = [{ name: "Fit Image (Original)", ratio: NaN }, { name: "Square (1:1)", ratio: 1 }, { name: "Standard (4:3)", ratio: 4/3 }, { name: "Widescreen (16:9)", ratio: 16/9 }, { name: "Cinema (21:9)", ratio: 21/9 }, { name: "Portrait (9:16)", ratio: 9/16 }, { name: "Tall Portrait (2:3)", ratio: 2/3 }, { name: "Twitter Header (3:1)", ratio: 3 }, { name: "Facebook Cover (~2.6:1)", ratio: 820/312 }, { name: "YouTube Banner (16:9)", ratio: 16/9 }];
+        function populateAspectRatioOptions() { aspectRatios.forEach(ar => { const opt = document.createElement('option'); opt.value = ar.ratio; opt.textContent = ar.name; squareAspectRatioSelect.appendChild(opt); }); squareAspectRatioSelect.value = "NaN"; }
+        function populateColorSwatches() {
+            colorSwatchContainer.innerHTML = ''; presetColors.forEach(color => {
+                const swatch = document.createElement('button'); swatch.type = 'button'; swatch.className = 'color-swatch'; swatch.style.backgroundColor = color; swatch.dataset.color = color; swatch.setAttribute('aria-label', `Select background color ${color}`); if (color === selectedCustomColor) swatch.classList.add('selected');
+                swatch.addEventListener('click', () => {
+                    selectedCustomColor = color; colorSwatchContainer.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected')); swatch.classList.add('selected'); document.querySelector('input[name="square-bg-option"][value="custom"]').checked = true; drawSquareCenteredImage();
+                }); colorSwatchContainer.appendChild(swatch);
+            });
+        }
+        function getBorderColor(imgEl) { try { const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 1; const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.drawImage(imgEl, 0, 0, 1, 1, 0, 0, 1, 1); const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data; return `rgb(${r}, ${g}, ${b})`; } catch (e) { console.error("Border color sample failed:", e); return '#FFFFFF'; } }
+        function drawSquareCenteredImage() {
+            if (!squareSourceImage.src || squareSourceImage.src.startsWith('#') || !squareSourceImage.naturalWidth) return;
+            const img = squareSourceImage, canvas = squarePreviewCanvas, ctx = canvas.getContext('2d'), container = squarePreviewContainer; const imgW = img.naturalWidth, imgH = img.naturalHeight, imgRatio = imgW / imgH; let targetRatio = parseFloat(squareAspectRatioSelect.value); let canvasW, canvasH;
+            if (isNaN(targetRatio)) { canvasW = imgW; canvasH = imgH; targetRatio = imgRatio; } else { if (imgRatio > targetRatio) { canvasW = imgW; canvasH = canvasW / targetRatio; } else { canvasH = imgH; canvasW = canvasH * targetRatio; } }
+            canvas.width = Math.round(canvasW); canvas.height = Math.round(canvasH); container.style.aspectRatio = `${canvasW} / ${canvasH}`;
+            const bgOpt = document.querySelector('input[name="square-bg-option"]:checked').value; const bgColor = bgOpt === 'border' ? getBorderColor(img) : selectedCustomColor;
+            ctx.fillStyle = bgColor; ctx.fillRect(0, 0, canvas.width, canvas.height); const x = (canvas.width - imgW) / 2, y = (canvas.height - imgH) / 2; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, x, y, imgW, imgH);
+        }
+        function handleSquareFileSelection(file) { if (!file) return resetSquareCenter(); const maxSize = MAX_IMAGE_SIZE_MB * 1024 * 1024; if (!file.type.startsWith('image/') || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { showToast('Invalid file type (PNG, JPG, WEBP only).', 'error'); return resetSquareCenter(); } if (file.size > maxSize) { showToast(`Image exceeds ${MAX_IMAGE_SIZE_MB}MB limit`, 'error'); return resetSquareCenter(); } squareSourceFile = file; const reader = new FileReader(); reader.onload = (e) => { squareSourceImage.onload = () => { squareUploadSection.classList.add('hidden'); squareMainSection.classList.remove('hidden'); populateColorSwatches(); drawSquareCenteredImage(); showToast('Image loaded. Adjust options.', 'info'); squareSourceImage.onload = null; }; squareSourceImage.onerror = () => { showToast('Failed to load image preview.', 'error'); resetSquareCenter(); }; squareSourceImage.src = e.target.result; }; reader.onerror = () => { showToast('Failed to read image file.', 'error'); resetSquareCenter(); }; reader.readAsDataURL(file); }
+        function resetSquareCenter() { squareSourceFile = null; squareFileInput.value = ''; squareSourceImage.src = '#'; const ctx = squarePreviewCanvas.getContext('2d'); ctx.clearRect(0, 0, squarePreviewCanvas.width, squarePreviewCanvas.height); squareUploadSection.classList.remove('hidden'); squareMainSection.classList.add('hidden'); document.querySelector('input[name="square-bg-option"][value="border"]').checked = true; selectedCustomColor = '#FFFFFF'; populateColorSwatches(); squareAspectRatioSelect.value = "NaN"; squarePreviewContainer.style.aspectRatio = 'auto'; }
+        squareDropzone.addEventListener('dragover', (e) => { e.preventDefault(); squareDropzone.classList.add('border-blue-500'); }); squareDropzone.addEventListener('dragleave', () => squareDropzone.classList.remove('border-blue-500')); squareDropzone.addEventListener('drop', (e) => { e.preventDefault(); squareDropzone.classList.remove('border-blue-500'); if (e.dataTransfer.files?.[0]) handleSquareFileSelection(e.dataTransfer.files[0]); });
+        document.getElementById('square-browse-files').addEventListener('click', () => squareFileInput.click()); squareFileInput.addEventListener('change', (e) => handleSquareFileSelection(e.target.files?.[0])); squareChangeImageBtn.addEventListener('click', resetSquareCenter);
+        squareBgOptions.forEach(r => r.addEventListener('change', drawSquareCenteredImage)); squareAspectRatioSelect.addEventListener('change', drawSquareCenteredImage);
+        squareProcessBtn.addEventListener('click', () => {
+            if (!squareSourceFile || !squarePreviewCanvas || squarePreviewCanvas.width === 0) return; setLoadingState(squareProcessBtn, true, 'Process & DL');
+            try {
+                drawSquareCenteredImage(); let mime = 'image/png', quality = undefined, originalType = squareSourceFile.type;
+                if (originalType === 'image/jpeg') { mime = 'image/jpeg'; quality = 0.92; }
+                else if (originalType === 'image/webp') { mime = 'image/webp'; quality = 0.9; }
+                const extension = mime.split('/')[1], filename = `${squareSourceFile.name.replace(/\.[^/.]+$/, "")}_fitted.${extension}`;
+                squarePreviewCanvas.toBlob((blob) => { if (!blob) { showToast('Failed to create image blob.', 'error'); setLoadingState(squareProcessBtn, false, 'Process & DL'); return; } const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); showToast('Processed image download started!', 'success'); setLoadingState(squareProcessBtn, false, 'Process & DL'); }, mime, quality);
+            } catch (e) { console.error("Aspect Fit failed:", e); showToast(`Processing failed: ${e.message}`, 'error'); setLoadingState(squareProcessBtn, false, 'Process & DL'); }
+        });
+
+        const activePolls = {};
+        async function fetchAndUpdateTasks(type) {
+            const idField = getTaskIdField(type), statusEndpointBase = type === 'download' ? `${apiBaseUrl}/status` : `${apiBaseUrl}/conversion/convert`;
+            let tasks = getUserTasks(type); const activeTasks = tasks.filter(t => t.status && !['completed', 'failed', 'canceled'].includes(t.status)); if (activeTasks.length === 0) return tasks;
+            await Promise.all(activeTasks.map(async (task) => {
+                const taskId = task[idField]; try {
+                    const response = await fetch(`${statusEndpointBase}/${taskId}`); if (response.ok) saveUserTask(type, await response.json()); else if (response.status === 404) saveUserTask(type, { ...task, status: 'failed', error_message: 'Task not found' }); else console.warn(`Update status ${response.status} for ${type} ${taskId}`);
+                } catch (e) { console.error(`Error updating ${type} ${taskId}:`, e); }
+            })); return getUserTasks(type);
+        }
+        async function displayUserTasks(type) {
+            const containerId = type === 'download' ? 'downloads-container' : 'conversions-container', container = document.getElementById(containerId), emptyIconClass = type === 'download' ? 'fa-download' : 'fa-exchange-alt'; container.innerHTML = `<div class="text-center p-4 text-gray-500 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</div>`; try {
+                let tasks = await fetchAndUpdateTasks(type); container.innerHTML = ''; if (!tasks || tasks.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-state-icon"><i class="fas ${emptyIconClass}"></i></div><p class="text-sm">No ${type}s yet</p></div>`; return; }
+                tasks.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).forEach(task => { const el = createTaskElement(task, type); if (el) container.appendChild(el); });
+            } catch (e) { console.error(`Display error ${type}:`, e); container.innerHTML = `<p class="text-red-500 text-center py-4 text-sm">Failed to load ${type}s</p>`; showToast(`Error loading ${type} list`, 'error'); }
+        }
+        const displayUserDownloads = () => displayUserTasks('download');
+        const displayUserConversions = () => displayUserTasks('conversion');
+        const taskTemplate = document.getElementById('task-template');
+        function createTaskElement(task, type) {
+            if (!taskTemplate?.content) return null; const element = taskTemplate.content.cloneNode(true).children[0]; const taskId = task[getTaskIdField(type)], status = task.status || 'unknown'; element.dataset.id = taskId; element.dataset.type = type;
+            element.querySelector('.task-title').textContent = task.title || `Untitled ${type}`;
+            const infoParts = []; if (type === 'conversion' && task.output_format) infoParts.push(`To: ${task.output_format.toUpperCase()}`); else if (type === 'download' && task.format_id) infoParts.push(`Fmt: ${task.format_id}`); if (task.file_size) infoParts.push(`Size: ${formatFileSize(task.file_size)}`); element.querySelector('.task-info').textContent = infoParts.join(' | ') || 'No details';
+            const iconCls = type === 'conversion' ? 'fa-exchange-alt text-green-500' : (task.mode === 'audio-only' ? 'fa-file-audio text-blue-500' : 'fa-youtube text-red-500'); element.querySelector('.task-icon i').className = `fas ${iconCls} text-sm sm:text-base`;
+            const statusEl = element.querySelector('.task-status'), progressEl = element.querySelector('.task-progress'), errorEl = element.querySelector('.task-error-info');
+            statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1); statusEl.className = 'task-status text-xs sm:text-sm px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full mr-1 sm:mr-2 whitespace-nowrap '; progressEl.classList.add('hidden'); errorEl.classList.add('hidden');
+            const statusStyles = { completed: 'bg-green-100 text-green-800', failed: 'bg-red-100 text-red-800', canceled: 'bg-red-100 text-red-800', queued: 'bg-yellow-100 text-yellow-800', processing: 'bg-blue-100 text-blue-800', downloading: 'bg-blue-100 text-blue-800' };
+            statusEl.classList.add(...(statusStyles[status] || ['bg-gray-100', 'text-gray-800']).split(' '));
+            if (status === 'failed' || status === 'canceled') { if (task.error_message) { errorEl.textContent = `Error: ${task.error_message}`; errorEl.classList.remove('hidden'); } }
+            else if (status === 'processing' || status === 'downloading') { progressEl.classList.remove('hidden'); const progress = Math.max(0, Math.min(100, Math.round(task.progress || 0))); progressEl.querySelector('.progress-bar').style.width = `${progress}%`; progressEl.querySelector('.progress-text').textContent = `${progress}%`; setupTaskPolling(taskId, type, element); }
+            const actionsEl = element.querySelector('.task-actions'); actionsEl.innerHTML = '';
+            if (status === 'completed') { const dlBtn = document.createElement('button'); dlBtn.className = 'text-indigo-600 hover:text-indigo-800 p-1'; dlBtn.title = 'Download file'; dlBtn.innerHTML = '<i class="fas fa-download"></i>'; dlBtn.addEventListener('click', () => { window.open(type === 'conversion' ? `${apiBaseUrl}/conversion/download-conversion/${taskId}` : `${apiBaseUrl}/download/${taskId}`, '_blank'); showToast(`Initiating download...`, 'info'); }); actionsEl.appendChild(dlBtn); }
+            const delBtn = document.createElement('button'); delBtn.className = 'text-red-600 hover:text-red-800 p-1'; delBtn.title = 'Delete task'; delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>'; delBtn.addEventListener('click', async () => { const wasPolling = activePolls[taskId]; element.remove(); deleteUserTask(type, taskId); showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} removed`, 'info'); if (wasPolling) clearInterval(activePolls[taskId]); delete activePolls[taskId]; const containerId = type === 'download' ? 'downloads-container' : 'conversions-container', cont = document.getElementById(containerId); if (!cont.querySelector('.task-item')) { const emptyIcon = type === 'download' ? 'fa-download' : 'fa-exchange-alt'; cont.innerHTML = `<div class="empty-state"><div class="empty-state-icon"><i class="fas ${emptyIcon}"></i></div><p class="text-sm">No ${type}s yet</p></div>`; } const delEp = type === 'conversion' ? `${apiBaseUrl}/conversion/convert/${taskId}` : `${apiBaseUrl}/youtube/${taskId}`; try { await fetch(delEp, { method: 'DELETE' }); } catch (e) { console.warn(`Server delete failed ${type} ${taskId}:`, e); } }); actionsEl.appendChild(delBtn); return element;
+        }
+        function setupTaskPolling(taskId, type, element) { if (activePolls[taskId]) return; activePolls[taskId] = setInterval(async () => { const statusEp = type === 'conversion' ? `${apiBaseUrl}/conversion/convert/${taskId}` : `${apiBaseUrl}/status/${taskId}`; try { if (!document.body.contains(element)) { clearInterval(activePolls[taskId]); delete activePolls[taskId]; return; } const response = await fetch(statusEp); if (!response.ok) { let status = 'failed', msg = `Polling error ${response.status}`; if (response.status === 404) msg = 'Task not found'; saveUserTask(type, { [getTaskIdField(type)]: taskId, status, error_message: msg }); clearInterval(activePolls[taskId]); delete activePolls[taskId]; if (type === 'conversion') displayUserConversions(); else displayUserDownloads(); return; } const data = await response.json(); saveUserTask(type, data); const progress = Math.max(0, Math.min(100, Math.round(data.progress || 0))), pBar = element.querySelector('.progress-bar'), pTxt = element.querySelector('.progress-text'); if (pBar) pBar.style.width = `${progress}%`; if (pTxt) pTxt.textContent = `${progress}%`; if (['completed', 'failed', 'canceled'].includes(data.status)) { clearInterval(activePolls[taskId]); delete activePolls[taskId]; showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} task ${data.status}!`, data.status === 'completed' ? 'success' : 'error'); if (type === 'conversion') displayUserConversions(); else displayUserDownloads(); } } catch (e) { console.error(`Polling error ${type} ${taskId}:`, e); } }, POLL_INTERVAL_MS); }
+
+        document.getElementById('refresh-downloads').addEventListener('click', displayUserDownloads);
+        document.getElementById('refresh-conversions').addEventListener('click', displayUserConversions);
+        document.getElementById('clear-downloads').addEventListener('click', () => showModal('Clear all download history? This cannot be undone.', () => { clearUserTasks('download'); displayUserDownloads(); showToast('Download history cleared', 'info'); }));
+        document.getElementById('clear-conversions').addEventListener('click', () => showModal('Clear all conversion history? This cannot be undone.', () => { clearUserTasks('conversion'); displayUserConversions(); showToast('Conversion history cleared', 'info'); }));
+        document.addEventListener('DOMContentLoaded', () => {
+            populateAspectRatioOptions(); populateColorSwatches();
+            displayUserDownloads(); displayUserConversions();
+            updateConverterUI(); resetCropper(); resetSquareCenter();
+            initializeTabFromUrl();
+        });
+    </script>
+</body>
+</html>
